@@ -1,4 +1,4 @@
-# AI-Enhanced Portfolio Analysis Tool
+# AI-Enhanced Portfolio Analysis Tool (In process)
 
 Project scaffold based on the technical stack from the planning document:
 
