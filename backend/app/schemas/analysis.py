@@ -23,10 +23,21 @@ class AnalysisRequest(BaseModel):
 
 class Metrics(BaseModel):
     cumulative_return: float
+    benchmark_cumulative_return: float
+    relative_performance: float
     annualized_return: float
     annualized_volatility: float
     sharpe_ratio: float
+    sortino_ratio: float
+    beta_vs_benchmark: float
+    downside_deviation: float
+    var_95: float
+    cvar_95: float
     max_drawdown: float
+    top_holding_weight: float
+    top_three_weight: float
+    effective_number_of_holdings: float
+    herfindahl_index: float
 
 
 class PortfolioVsBenchmarkPoint(BaseModel):
@@ -46,19 +57,74 @@ class DrawdownPoint(BaseModel):
     drawdown: float
 
 
+class RollingVolatilityPoint(BaseModel):
+    date: str
+    portfolio: float
+    benchmark: float
+
+
+class RollingBetaPoint(BaseModel):
+    date: str
+    beta: float
+
+
 class CorrelationRow(BaseModel):
     ticker: str
     values: dict[str, float]
+
+
+class RiskContributionRow(BaseModel):
+    ticker: str
+    weight: float
+    volatility_contribution: float
+    risk_contribution_pct: float
+
+
+class DrawdownPeriod(BaseModel):
+    start_date: str
+    trough_date: str
+    recovery_date: str | None
+    drawdown: float
+    duration_days: int
+
+
+class ScenarioAssetImpact(BaseModel):
+    ticker: str
+    sector: str
+    shock: float
+    weighted_impact: float
+
+
+class ScenarioResult(BaseModel):
+    scenario_type: str
+    scenario_name: str
+    description: str
+    assumptions: list[str]
+    portfolio_estimated_return: float
+    benchmark_estimated_return: float | None
+    relative_impact_vs_benchmark: float | None
+    asset_impacts: list[ScenarioAssetImpact]
+    summary: str
+
+
+class ScenarioAnalysis(BaseModel):
+    market_shock: ScenarioResult
+    sector_shock: ScenarioResult
 
 
 class Charts(BaseModel):
     portfolio_vs_benchmark: list[PortfolioVsBenchmarkPoint]
     allocation: list[AllocationPoint]
     drawdown: list[DrawdownPoint]
+    rolling_volatility: list[RollingVolatilityPoint]
+    rolling_beta: list[RollingBetaPoint]
     correlation_matrix: list[CorrelationRow]
+    risk_contribution: list[RiskContributionRow]
+    worst_drawdown_periods: list[DrawdownPeriod]
 
 
 class AnalysisResponse(BaseModel):
     metrics: Metrics
     charts: Charts
+    scenarios: ScenarioAnalysis
     summary: str

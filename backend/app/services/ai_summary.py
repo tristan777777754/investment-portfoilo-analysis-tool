@@ -32,6 +32,7 @@ def build_ai_summary(payload: AnalysisRequest, results: dict) -> str:
         if results["relative_performance"] >= 0
         else "underperformed"
     )
+    top_risk_contributor = results["risk_contribution"][0]["ticker"] if results["risk_contribution"] else "not available"
 
     # Build a controlled prompt so the model explains metrics
     # instead of giving direct financial advice.
@@ -52,6 +53,7 @@ Rules:
 - Mention whether the portfolio outperformed or underperformed the benchmark.
 - Mention concentration risk when one holding has a clearly larger weight.
 - Mention diversification using the correlation information below.
+- Mention which asset contributes the most to overall portfolio risk.
 
 Portfolio allocation:
 {allocation_text}
@@ -66,6 +68,10 @@ Metrics:
 - Annualized return: {results["annualized_return"]:.4f}
 - Annualized volatility: {results["annualized_volatility"]:.4f}
 - Sharpe ratio: {results["sharpe_ratio"]:.4f}
+- Sortino ratio: {results["sortino_ratio"]:.4f}
+- Beta vs benchmark: {results["beta_vs_benchmark"]:.4f}
+- VaR 95%: {results["var_95"]:.4f}
+- CVaR 95%: {results["cvar_95"]:.4f}
 - Maximum drawdown: {results["max_drawdown"]:.4f}
 
 Portfolio benchmark comparison:
@@ -73,6 +79,7 @@ Portfolio benchmark comparison:
 
 Diversification note:
 - Strongest correlation pair: {strongest_pair_text}
+- Top risk contributor: {top_risk_contributor}
 """
 
     try:
@@ -109,17 +116,24 @@ def build_fallback_summary(payload: AnalysisRequest, results: dict) -> str:
     benchmark_return = f"{results['benchmark_cumulative_return']:.2%}"
     relative_performance = f"{results['relative_performance']:.2%}"
     sharpe_ratio = f"{results['sharpe_ratio']:.2f}"
+    sortino_ratio = f"{results['sortino_ratio']:.2f}"
+    beta_vs_benchmark = f"{results['beta_vs_benchmark']:.2f}"
+    var_95 = f"{results['var_95']:.2%}"
+    cvar_95 = f"{results['cvar_95']:.2%}"
     benchmark_comparison = "outperformed" if results["relative_performance"] >= 0 else "underperformed"
     strongest_pair_text = build_strongest_pair_text(results)
+    top_risk_contributor = results["risk_contribution"][0]["ticker"] if results["risk_contribution"] else "not available"
 
     return (
         f"The portfolio is most heavily allocated to {top_asset.ticker.upper()} "
         f"and delivered a cumulative return of {cumulative_return}, versus {benchmark_return} "
         f"for the benchmark. It {benchmark_comparison} the benchmark by {relative_performance}. "
         f"Annualized return was {annualized_return}, while annualized volatility was "
-        f"{annualized_volatility}. The Sharpe ratio was {sharpe_ratio}, and the "
-        f"maximum drawdown over the selected period was {max_drawdown}. "
-        f"The strongest correlation relationship was {strongest_pair_text}. "
+        f"{annualized_volatility}. The Sharpe ratio was {sharpe_ratio}, the Sortino ratio was "
+        f"{sortino_ratio}, and beta versus the benchmark was {beta_vs_benchmark}. "
+        f"Daily tail-risk measures came in at VaR 95% of {var_95} and CVaR 95% of {cvar_95}, "
+        f"while the maximum drawdown over the selected period was {max_drawdown}. "
+        f"The strongest correlation relationship was {strongest_pair_text}, and the largest risk contributor was {top_risk_contributor}. "
         f"This is a fallback summary because the AI service was unavailable."
     )
 

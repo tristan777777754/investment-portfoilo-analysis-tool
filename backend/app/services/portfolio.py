@@ -58,6 +58,16 @@ def calculate_portfolio_metrics(
     if annualized_volatility > 0:
         sharpe_ratio = (annualized_return - risk_free_rate) / annualized_volatility
 
+    # Sortino ratio only penalizes downside volatility.
+    downside_returns = portfolio_returns[portfolio_returns < 0]
+    downside_deviation = 0.0
+    if not downside_returns.empty:
+        downside_deviation = downside_returns.std() * np.sqrt(252)
+
+    sortino_ratio = 0.0
+    if downside_deviation > 0:
+        sortino_ratio = (annualized_return - risk_free_rate) / downside_deviation
+
     # Build cumulative growth curve of the portfolio.
     cumulative_curve = (1 + portfolio_returns).cumprod()
 
@@ -81,6 +91,65 @@ def calculate_portfolio_metrics(
     # Correlation matrix helps us understand diversification between assets.
     correlation_matrix = asset_returns.corr()
 
+    # Beta measures sensitivity to benchmark moves.
+    benchmark_variance = benchmark_returns.var()
+    beta_vs_benchmark = 0.0
+    if benchmark_variance > 0:
+        beta_vs_benchmark = portfolio_returns.cov(benchmark_returns) / benchmark_variance
+
+    # Historical VaR and CVaR summarize tail loss risk.
+    var_threshold = portfolio_returns.quantile(0.05)
+    cvar_threshold = portfolio_returns[portfolio_returns <= var_threshold].mean()
+
+    # Rolling volatility shows how annualized risk changes through time.
+    rolling_window = min(21, len(portfolio_returns))
+    rolling_volatility = portfolio_returns.rolling(window=rolling_window).std() * np.sqrt(252)
+    benchmark_rolling_volatility = benchmark_returns.rolling(window=rolling_window).std() * np.sqrt(252)
+    rolling_beta = portfolio_returns.rolling(window=rolling_window).cov(benchmark_returns)
+    benchmark_rolling_variance = benchmark_returns.rolling(window=rolling_window).var()
+    rolling_beta = rolling_beta.divide(benchmark_rolling_variance.replace(0, np.nan))
+
+    # Concentration metrics summarize how diversified the weight profile really is.
+    top_holding_weight = float(weights.max())
+    top_three_weight = float(np.sort(weights)[-3:].sum()) if len(weights) >= 3 else float(weights.sum())
+    herfindahl_index = float(np.sum(np.square(weights)))
+    effective_number_of_holdings = float(1 / herfindahl_index) if herfindahl_index > 0 else 0.0
+
+    # Attribute portfolio risk to each asset using covariance-based volatility contribution.
+    covariance_matrix = asset_returns.cov() * 252
+    portfolio_variance = float(weights.T @ covariance_matrix.values @ weights)
+    portfolio_volatility = np.sqrt(portfolio_variance) if portfolio_variance > 0 else 0.0
+    marginal_contribution = covariance_matrix.values @ weights
+    volatility_contribution = (
+        weights * marginal_contribution / portfolio_volatility
+        if portfolio_volatility > 0
+        else np.zeros_like(weights)
+    )
+    risk_contribution_pct = (
+        volatility_contribution / portfolio_volatility
+        if portfolio_volatility > 0
+        else np.zeros_like(weights)
+    )
+    risk_contribution = [
+        {
+            "ticker": asset.ticker.upper(),
+            "weight": float(weight),
+            "volatility_contribution": float(vol_contribution),
+            "risk_contribution_pct": float(risk_pct),
+        }
+        for asset, weight, vol_contribution, risk_pct in zip(
+            payload.assets,
+            weights,
+            volatility_contribution,
+            risk_contribution_pct,
+            strict=False,
+        )
+    ]
+    risk_contribution.sort(key=lambda item: item["risk_contribution_pct"], reverse=True)
+
+    # Break the drawdown curve into individual peak-to-trough periods for diagnostics.
+    worst_drawdown_periods = _extract_drawdown_periods(drawdown_series)
+
     return {
         "asset_returns": asset_returns,
         "benchmark_returns": benchmark_returns,
@@ -91,10 +160,78 @@ def calculate_portfolio_metrics(
         "annualized_return": float(annualized_return),
         "annualized_volatility": float(annualized_volatility),
         "sharpe_ratio": float(sharpe_ratio),
+        "sortino_ratio": float(sortino_ratio),
+        "beta_vs_benchmark": float(beta_vs_benchmark),
+        "downside_deviation": float(downside_deviation),
+        "var_95": float(var_threshold),
+        "cvar_95": float(cvar_threshold),
         "max_drawdown": float(max_drawdown),
+        "top_holding_weight": top_holding_weight,
+        "top_three_weight": top_three_weight,
+        "effective_number_of_holdings": effective_number_of_holdings,
+        "herfindahl_index": herfindahl_index,
         "cumulative_curve": cumulative_curve,
         "benchmark_cumulative_curve": benchmark_cumulative_curve,
         "asset_cumulative_curves": asset_cumulative_curves,
         "drawdown_series": drawdown_series,
+        "rolling_volatility": rolling_volatility,
+        "benchmark_rolling_volatility": benchmark_rolling_volatility,
+        "rolling_beta": rolling_beta,
         "correlation_matrix": correlation_matrix,
+        "risk_contribution": risk_contribution,
+        "worst_drawdown_periods": worst_drawdown_periods,
     }
+
+
+def _extract_drawdown_periods(drawdown_series: pd.Series) -> list[dict]:
+    """
+    Convert the drawdown curve into discrete peak-to-trough episodes.
+    """
+
+    periods = []
+    in_drawdown = False
+    start_date = None
+    trough_date = None
+    trough_value = 0.0
+
+    for index, value in drawdown_series.items():
+        if not in_drawdown and value < 0:
+            in_drawdown = True
+            start_date = index
+            trough_date = index
+            trough_value = float(value)
+            continue
+
+        if in_drawdown:
+            if value < trough_value:
+                trough_value = float(value)
+                trough_date = index
+
+            if value >= 0:
+                periods.append(
+                    {
+                        "start_date": start_date,
+                        "trough_date": trough_date,
+                        "recovery_date": index,
+                        "drawdown": trough_value,
+                        "duration_days": int((index - start_date).days),
+                    }
+                )
+                in_drawdown = False
+                start_date = None
+                trough_date = None
+                trough_value = 0.0
+
+    if in_drawdown and start_date is not None and trough_date is not None:
+        periods.append(
+            {
+                "start_date": start_date,
+                "trough_date": trough_date,
+                "recovery_date": None,
+                "drawdown": trough_value,
+                "duration_days": int((drawdown_series.index[-1] - start_date).days),
+            }
+        )
+
+    periods.sort(key=lambda item: item["drawdown"])
+    return periods[:5]
