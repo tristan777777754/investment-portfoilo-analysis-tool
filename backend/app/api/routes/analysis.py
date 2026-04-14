@@ -8,6 +8,8 @@ from app.schemas.analysis import (
     CorrelationRow,
     DrawdownPeriod,
     DrawdownPoint,
+    FactorExposure,
+    FactorModel,
     Metrics,
     PortfolioVsBenchmarkPoint,
     ScenarioAnalysis,
@@ -18,6 +20,7 @@ from app.schemas.analysis import (
     RollingBetaPoint,
 )
 from app.services.ai_summary import build_ai_summary
+from app.services.factor_model import calculate_factor_model
 from app.services.market_data import fetch_historical_prices
 from app.services.portfolio import calculate_portfolio_metrics
 from app.services.scenario import calculate_scenario_analysis
@@ -34,7 +37,8 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
     1. Fetch historical prices
     2. Calculate portfolio metrics
     3. Format chart output
-    4. Generate AI summary
+    4. Run scenario and factor analysis
+    5. Generate AI summary
     """
 
     # Fetch cleaned market data for the selected assets and benchmark.
@@ -43,6 +47,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
     # Calculate the main portfolio analytics from the price data.
     results = calculate_portfolio_metrics(asset_prices, benchmark_prices, payload)
     scenario_results = calculate_scenario_analysis(payload, results)
+    factor_model_results = calculate_factor_model(results)
 
     # Merge portfolio and benchmark cumulative curves into one chart series.
     merged_curves = (
@@ -190,6 +195,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
             market_shock=market_scenario,
             sector_shock=sector_scenario,
         ),
+        factor_model=_build_factor_model(factor_model_results),
         summary=summary,
     )
 
@@ -217,4 +223,34 @@ def _build_scenario_result(raw_scenario: dict) -> ScenarioResult:
             for item in raw_scenario["asset_impacts"]
         ],
         summary=raw_scenario["summary"],
+    )
+
+
+def _build_factor_model(raw_factor_model: dict) -> FactorModel:
+    """
+    Convert factor model dictionaries into response models for the API layer.
+    """
+
+    return FactorModel(
+        is_available=raw_factor_model["is_available"],
+        model_name=raw_factor_model["model_name"],
+        formula=raw_factor_model["formula"],
+        observations=raw_factor_model["observations"],
+        start_date=raw_factor_model["start_date"],
+        end_date=raw_factor_model["end_date"],
+        alpha_daily=raw_factor_model["alpha_daily"],
+        alpha_annualized=raw_factor_model["alpha_annualized"],
+        r_squared=raw_factor_model["r_squared"],
+        residual_volatility=raw_factor_model["residual_volatility"],
+        exposures=[
+            FactorExposure(
+                factor=item["factor"],
+                beta=item["beta"],
+                description=item["description"],
+            )
+            for item in raw_factor_model["exposures"]
+        ],
+        summary=raw_factor_model["summary"],
+        future_plan=raw_factor_model["future_plan"],
+        error_message=raw_factor_model["error_message"],
     )

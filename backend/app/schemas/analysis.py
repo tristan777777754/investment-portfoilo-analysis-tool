@@ -112,6 +112,29 @@ class ScenarioAnalysis(BaseModel):
     sector_shock: ScenarioResult
 
 
+class FactorExposure(BaseModel):
+    factor: str
+    beta: float
+    description: str
+
+
+class FactorModel(BaseModel):
+    is_available: bool
+    model_name: str
+    formula: str
+    observations: int
+    start_date: str | None
+    end_date: str | None
+    alpha_daily: float | None
+    alpha_annualized: float | None
+    r_squared: float | None
+    residual_volatility: float | None
+    exposures: list[FactorExposure]
+    summary: str
+    future_plan: str
+    error_message: str | None
+
+
 class Charts(BaseModel):
     portfolio_vs_benchmark: list[PortfolioVsBenchmarkPoint]
     allocation: list[AllocationPoint]
@@ -127,4 +150,5 @@ class AnalysisResponse(BaseModel):
     metrics: Metrics
     charts: Charts
     scenarios: ScenarioAnalysis
+    factor_model: FactorModel
     summary: str

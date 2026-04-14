@@ -3,13 +3,121 @@
 @tailwind utilities;
 
 :root {
-  color: #101828;
-  background: #f8fafc;
+  color: #f8fafc;
+  background: #060816;
   font-family: "Avenir Next", Avenir, ui-sans-serif, system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
+  min-height: 100vh;
+  background: #060816;
+}
+
+.workspace-dark .bg-white {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+}
+
+.workspace-dark .bg-white\/85,
+.workspace-dark .bg-white\/80 {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+}
+
+.workspace-dark .bg-surface {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+.workspace-dark .text-slate {
+  color: #c5ccd8 !important;
+}
+
+.workspace-dark .text-ink {
+  color: #f8fafc !important;
+}
+
+.workspace-dark .text-slate-700 {
+  color: #d4dbe7 !important;
+}
+
+.workspace-dark .text-rose-700 {
+  color: #f1b0a3 !important;
+}
+
+.workspace-dark .text-emerald-700,
+.workspace-dark .text-emerald-300,
+.workspace-dark .text-amber-300 {
+  color: #e7cda0 !important;
+}
+
+.workspace-dark .text-red-100 {
+  color: #f7d2cb !important;
+}
+
+.workspace-dark .text-amber-100,
+.workspace-dark .text-emerald-100 {
+  color: #f3e2bf !important;
+}
+
+.workspace-dark .text-white\/45 {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+.workspace-dark .text-white\/55 {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.workspace-dark .text-white\/70 {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.workspace-dark .ring-mist,
+.workspace-dark .border-mist {
+  --tw-ring-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.workspace-dark .border-white\/70,
+.workspace-dark [class*="border-[#D0D5DD]"] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.workspace-dark .border-red-200 {
+  border-color: rgba(200, 140, 122, 0.36) !important;
+}
+
+.workspace-dark .bg-slate-100 {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.workspace-dark .ring-slate-200 {
+  --tw-ring-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.workspace-dark .shadow-panel {
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28) !important;
+}
+
+.workspace-dark table thead,
+.workspace-dark table tbody tr {
+  color: #e2e8f0;
+}
+
+.workspace-dark .recharts-cartesian-grid-horizontal line,
+.workspace-dark .recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-dark .recharts-cartesian-axis-tick-value,
+.workspace-dark .recharts-text {
+  fill: #b7c0cf !important;
+}
+
+.workspace-dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: rgba(13, 17, 27, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  color: #f8fafc !important;
 }
 
 * {
@@ -21,4 +129,3 @@ select,
 button {
   font: inherit;
 }
-
