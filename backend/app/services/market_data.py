@@ -1,11 +1,16 @@
 from datetime import datetime, timedelta
+from io import StringIO
+import logging
 from pathlib import Path
 import time
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.schemas.analysis import AnalysisRequest
@@ -232,21 +237,42 @@ def _download_from_yfinance(tickers: list[str], lookback_period: str) -> pd.Data
 def _download_from_stooq(tickers: list[str], lookback_period: str) -> pd.DataFrame:
     """
     Download historical prices from Stooq as a secondary fallback source.
+
+    Tries the `.us` suffix first (US equities/ETFs), then falls back to the bare
+    ticker symbol so that non-US or index symbols are also attempted.
     """
 
     frames: list[pd.Series] = []
 
     for ticker in tickers:
-        stooq_symbol = f"{ticker.lower()}.us"
-        url = f"https://stooq.com/q/d/l/?s={stooq_symbol}&i=d"
-        frame = pd.read_csv(url)
+        candidates = [f"{ticker.lower()}.us", ticker.lower()]
+        fetched = False
 
-        if frame.empty or "Date" not in frame.columns or "Close" not in frame.columns:
-            raise ValueError(f"No usable data returned from Stooq for {ticker}.")
+        for symbol in candidates:
+            url = f"https://stooq.com/q/d/l/?s={symbol}&i=d"
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                frame = pd.read_csv(StringIO(response.text))
+            except Exception as exc:
+                logger.warning("Stooq request failed for symbol %s: %s", symbol, exc)
+                continue
 
-        series = frame.assign(Date=pd.to_datetime(frame["Date"]))[["Date", "Close"]].copy()
-        series = series.rename(columns={"Close": ticker}).set_index("Date")[ticker]
-        frames.append(series)
+            if frame.empty or "Date" not in frame.columns or "Close" not in frame.columns:
+                logger.warning(
+                    "Stooq returned empty or unusable CSV for symbol %s (ticker %s).",
+                    symbol, ticker,
+                )
+                continue
+
+            series = frame.assign(Date=pd.to_datetime(frame["Date"]))[["Date", "Close"]].copy()
+            series = series.rename(columns={"Close": ticker}).set_index("Date")[ticker]
+            frames.append(series)
+            fetched = True
+            break
+
+        if not fetched:
+            raise ValueError(f"No usable data returned from Stooq for {ticker} (tried: {candidates}).")
 
     close_prices = pd.concat(frames, axis=1).sort_index()
     start_date = pd.Timestamp(datetime.utcnow() - timedelta(days=LOOKBACK_TO_DAYS[lookback_period]))

@@ -1,4 +1,8 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter
+
+import numpy as np
 
 from app.schemas.analysis import (
     AllocationPoint,
@@ -11,6 +15,9 @@ from app.schemas.analysis import (
     FactorExposure,
     FactorModel,
     Metrics,
+    MonteCarloFanBands,
+    MonteCarloResult,
+    MonteCarloTerminalStats,
     PortfolioVsBenchmarkPoint,
     ScenarioAnalysis,
     ScenarioAssetImpact,
@@ -22,10 +29,22 @@ from app.schemas.analysis import (
 from app.services.ai_summary import build_ai_summary
 from app.services.factor_model import calculate_factor_model
 from app.services.market_data import fetch_historical_prices
+from app.services.monte_carlo import run_monte_carlo
 from app.services.portfolio import calculate_portfolio_metrics
 from app.services.scenario import calculate_scenario_analysis
 
 router = APIRouter(tags=["analysis"])
+
+_CHART_MAX_POINTS = 260
+
+
+def _downsample(series_or_frame, max_points: int = _CHART_MAX_POINTS):
+    """Return every N-th row so the chart series stays under max_points."""
+    n = len(series_or_frame)
+    if n <= max_points:
+        return series_or_frame
+    step = max(1, n // max_points)
+    return series_or_frame.iloc[::step]
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
@@ -46,8 +65,17 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
 
     # Calculate the main portfolio analytics from the price data.
     results = calculate_portfolio_metrics(asset_prices, benchmark_prices, payload)
-    scenario_results = calculate_scenario_analysis(payload, results)
-    factor_model_results = calculate_factor_model(results)
+
+    # Run scenario analysis, factor model, and Monte Carlo in parallel — all depend only on results.
+    weights_array = np.array([asset.weight for asset in payload.assets], dtype=float) / 100.0
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_scenario = executor.submit(calculate_scenario_analysis, payload, results)
+        future_factor = executor.submit(calculate_factor_model, results)
+        future_mc = executor.submit(run_monte_carlo, results["asset_returns"], weights_array)
+
+    scenario_results = future_scenario.result()
+    factor_model_results = future_factor.result()
+    mc_results = future_mc.result()
 
     # Merge portfolio and benchmark cumulative curves into one chart series.
     merged_curves = (
@@ -58,7 +86,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
     )
 
     portfolio_vs_benchmark = []
-    for index, row in merged_curves.iterrows():
+    for index, row in _downsample(merged_curves).iterrows():
         portfolio_vs_benchmark.append(
             PortfolioVsBenchmarkPoint(
                 date=index.strftime("%Y-%m-%d"),
@@ -74,7 +102,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
 
     # Convert drawdown series into JSON-friendly chart points.
     drawdown_points = []
-    for index, value in results["drawdown_series"].items():
+    for index, value in _downsample(results["drawdown_series"]).items():
         drawdown_points.append(
             DrawdownPoint(
                 date=index.strftime("%Y-%m-%d"),
@@ -91,7 +119,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
         .join(results["benchmark_rolling_volatility"].to_frame("benchmark"), how="inner")
         .dropna()
     )
-    for index, row in rolling_volatility_frame.iterrows():
+    for index, row in _downsample(rolling_volatility_frame).iterrows():
         rolling_volatility_points.append(
             RollingVolatilityPoint(
                 date=index.strftime("%Y-%m-%d"),
@@ -102,7 +130,7 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
 
     # Convert rolling beta series into chart points for the risk view.
     rolling_beta_points = []
-    for index, value in results["rolling_beta"].dropna().items():
+    for index, value in _downsample(results["rolling_beta"].dropna()).items():
         rolling_beta_points.append(
             RollingBetaPoint(
                 date=index.strftime("%Y-%m-%d"),
@@ -196,6 +224,24 @@ def analyze_portfolio(payload: AnalysisRequest) -> AnalysisResponse:
             sector_shock=sector_scenario,
         ),
         factor_model=_build_factor_model(factor_model_results),
+        monte_carlo=MonteCarloResult(
+            n_simulations=mc_results["n_simulations"],
+            horizon_days=mc_results["horizon_days"],
+            fan_bands=MonteCarloFanBands(
+                percentiles=mc_results["fan_bands"]["percentiles"],
+                days=mc_results["fan_bands"]["days"],
+                values=mc_results["fan_bands"]["values"],
+            ),
+            terminal_stats=MonteCarloTerminalStats(
+                median_return=mc_results["terminal_stats"]["median_return"],
+                mean_return=mc_results["terminal_stats"]["mean_return"],
+                std_return=mc_results["terminal_stats"]["std_return"],
+                var=mc_results["terminal_stats"]["var"],
+                cvar=mc_results["terminal_stats"]["cvar"],
+                prob_loss=mc_results["terminal_stats"]["prob_loss"],
+                prob_above_5pct=mc_results["terminal_stats"]["prob_above_5pct"],
+            ),
+        ),
         summary=summary,
     )
 
