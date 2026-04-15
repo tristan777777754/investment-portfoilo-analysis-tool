@@ -1,12 +1,19 @@
 import csv
 import io
+import logging
 import zipfile
-from functools import lru_cache
+from datetime import date
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
 
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+FACTOR_CACHE_DIR = Path(settings.MARKET_DATA_CACHE_DIR) / "factors"
 
 FAMA_FRENCH_DAILY_URL = (
     "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
@@ -120,14 +127,24 @@ def calculate_factor_model(results: dict) -> dict:
     }
 
 
-@lru_cache(maxsize=1)
 def fetch_fama_french_daily_factors() -> pd.DataFrame:
     """
     Fetch and merge official Kenneth French daily factor datasets.
 
-    The source files store returns in percent form, so this function converts them
-    into decimal daily returns before the regression step.
+    Results are cached to disk using a monthly key so repeated requests within
+    the same month skip the network entirely. The source files store returns in
+    percent form, so this function converts them into decimal daily returns
+    before the regression step.
     """
+    cache_key = date.today().strftime("%Y-%m")
+    FACTOR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file = FACTOR_CACHE_DIR / f"ff_factors_{cache_key}.pkl"
+
+    if cache_file.exists():
+        try:
+            return pd.read_pickle(cache_file)
+        except Exception:
+            logger.warning("Failed to read factor cache; re-fetching from network.")
 
     three_factor_data = _download_and_parse_factor_zip(
         FAMA_FRENCH_DAILY_URL,
@@ -139,7 +156,14 @@ def fetch_fama_french_daily_factors() -> pd.DataFrame:
     ).rename(columns={"Mom": "MOM"})
 
     factor_data = three_factor_data.join(momentum_data[["MOM"]], how="inner")
-    return factor_data[["Mkt-RF", "SMB", "HML", "MOM", "RF"]].sort_index()
+    result = factor_data[["Mkt-RF", "SMB", "HML", "MOM", "RF"]].sort_index()
+
+    try:
+        result.to_pickle(cache_file)
+    except Exception:
+        logger.warning("Failed to write factor cache to disk.")
+
+    return result
 
 
 def _download_and_parse_factor_zip(url: str, required_columns: list[str]) -> pd.DataFrame:
@@ -148,7 +172,7 @@ def _download_and_parse_factor_zip(url: str, required_columns: list[str]) -> pd.
     """
 
     request = Request(url, headers={"User-Agent": "portfolio-factor-analysis/1.0"})
-    with urlopen(request, timeout=20) as response:
+    with urlopen(request, timeout=10) as response:
         zip_bytes = response.read()
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:

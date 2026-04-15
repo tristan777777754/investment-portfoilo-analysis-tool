@@ -59,10 +59,12 @@ def calculate_portfolio_metrics(
         sharpe_ratio = (annualized_return - risk_free_rate) / annualized_volatility
 
     # Sortino ratio only penalizes downside volatility.
-    downside_returns = portfolio_returns[portfolio_returns < 0]
+    # Correct formula: root mean squared of below-target (0) returns, annualized.
+    target = 0.0
+    below_target = np.minimum(portfolio_returns - target, 0)
     downside_deviation = 0.0
-    if not downside_returns.empty:
-        downside_deviation = downside_returns.std() * np.sqrt(252)
+    if len(below_target) > 0:
+        downside_deviation = np.sqrt(np.mean(below_target ** 2) * 252)
 
     sortino_ratio = 0.0
     if downside_deviation > 0:
@@ -102,11 +104,13 @@ def calculate_portfolio_metrics(
     cvar_threshold = portfolio_returns[portfolio_returns <= var_threshold].mean()
 
     # Rolling volatility shows how annualized risk changes through time.
+    # min_periods=5 prevents all-NaN output when data has gaps shorter than the full window.
     rolling_window = min(21, len(portfolio_returns))
-    rolling_volatility = portfolio_returns.rolling(window=rolling_window).std() * np.sqrt(252)
-    benchmark_rolling_volatility = benchmark_returns.rolling(window=rolling_window).std() * np.sqrt(252)
-    rolling_beta = portfolio_returns.rolling(window=rolling_window).cov(benchmark_returns)
-    benchmark_rolling_variance = benchmark_returns.rolling(window=rolling_window).var()
+    min_periods = min(5, rolling_window)
+    rolling_volatility = portfolio_returns.rolling(window=rolling_window, min_periods=min_periods).std() * np.sqrt(252)
+    benchmark_rolling_volatility = benchmark_returns.rolling(window=rolling_window, min_periods=min_periods).std() * np.sqrt(252)
+    rolling_beta = portfolio_returns.rolling(window=rolling_window, min_periods=min_periods).cov(benchmark_returns)
+    benchmark_rolling_variance = benchmark_returns.rolling(window=rolling_window, min_periods=min_periods).var()
     rolling_beta = rolling_beta.divide(benchmark_rolling_variance.replace(0, np.nan))
 
     # Concentration metrics summarize how diversified the weight profile really is.

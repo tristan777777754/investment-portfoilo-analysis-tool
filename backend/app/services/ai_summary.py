@@ -84,14 +84,15 @@ Diversification note:
 
     try:
         # Request a short natural-language explanation from the model.
-        response = client.responses.create(
+        response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
-            input=prompt,
+            messages=[{"role": "user", "content": prompt}],
         )
 
         # Return the generated summary if available.
-        if response.output_text:
-            return response.output_text.strip()
+        summary_text = response.choices[0].message.content
+        if summary_text:
+            return summary_text.strip()
 
         return build_fallback_summary(payload, results)
 
