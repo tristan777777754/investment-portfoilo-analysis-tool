@@ -2,6 +2,7 @@ import { benchmarkOptions } from "../constants.jsx";
 import { TickerCombobox } from "./shared/TickerCombobox.jsx";
 
 export function PortfolioForm({
+  className = "",
   form,
   isLoading,
   totalWeight,
@@ -20,7 +21,7 @@ export function PortfolioForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="self-start rounded-[36px] border border-white/10 bg-[#0F172A] p-5 text-white shadow-panel overflow-visible sm:p-6 2xl:order-2 2xl:sticky 2xl:top-8 2xl:max-h-[calc(100vh-6rem)] 2xl:overflow-hidden"
+      className={`self-start rounded-[36px] border border-white/10 bg-[#0F172A] p-5 text-white shadow-panel overflow-visible sm:p-6 min-[1850px]:sticky min-[1850px]:top-8 min-[1850px]:max-h-[calc(100vh-6rem)] min-[1850px]:overflow-hidden ${className}`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold">Input Panel</h2>
@@ -34,8 +35,8 @@ export function PortfolioForm({
         </button>
       </div>
 
-      <div className="mt-6 flex flex-col gap-4 2xl:h-[calc(100%-3.5rem)]">
-        <div className="space-y-4 overflow-visible pr-0 2xl:max-h-[18.5rem] 2xl:overflow-y-auto 2xl:pr-2">
+      <div className="mt-6 flex flex-col gap-4 min-[1850px]:h-[calc(100%-3.5rem)]">
+        <div className="space-y-4 overflow-visible pr-0 min-[1850px]:max-h-[18.5rem] min-[1850px]:overflow-y-auto min-[1850px]:pr-2">
           {form.assets.map((asset, index) => (
             <div key={`${asset.ticker}-${index}`} className="rounded-3xl border border-white/10 bg-white/5 p-4">
               <div className="mb-3 flex items-center justify-between">

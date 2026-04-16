@@ -73,6 +73,10 @@ function App() {
       setAnalysis(null);
       if (error.name === "AbortError") {
         setErrorMessage("Request timed out after 60 seconds. The analysis is taking too long — try a shorter lookback period.");
+      } else if (error instanceof TypeError && error.message === "Failed to fetch") {
+        setErrorMessage(
+          `Cannot reach the backend API at ${API_BASE_URL}. Check that the backend server is running and that CORS allows this frontend origin.`
+        );
       } else {
         setErrorMessage(error.message || "Something went wrong.");
       }
@@ -266,7 +270,7 @@ function App() {
               <p className="mt-4 text-sm leading-7 text-white/85">{currentJourney.finding}</p>
             </section>
 
-            <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_21rem]">
+            <div className="grid gap-6 min-[1850px]:grid-cols-[minmax(0,1fr)_20rem]">
               <PortfolioForm
                 form={form}
                 isLoading={isLoading}
@@ -282,9 +286,10 @@ function App() {
                 onChangeLookback={(value) => setForm((c) => ({ ...c, lookbackPeriod: value }))}
                 onChangeBenchmark={(value) => setForm((c) => ({ ...c, benchmark: value }))}
                 isTickerDisabled={isTickerDisabled}
+                className="min-[1850px]:order-2"
               />
 
-              <div className="min-w-0 space-y-6 2xl:order-1">
+              <div className="min-w-0 space-y-6 min-[1850px]:order-1">
                 {activeTab === "overview" && (
                   <TabErrorBoundary tabKey="overview">
                     <SnapshotTab analysis={analysis} isLoading={isLoading} form={form} />
